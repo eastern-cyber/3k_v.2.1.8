@@ -123,8 +123,8 @@
             environment = '🖥️ Local Development';
         } else {
             // Production - use your Vercel URL
-            backendUrl = 'https://kokkokkok-auth-api.vercel.app'; // Replace with your actual Vercel URL
-            environment = '🌐 Production (Vercel)';
+            backendUrl = 'https://3k214.dfi.fund'; // Replace with your actual Vercel URL
+            environment = '🌐 Production (Version 2.1.4)';
         }
         
         // Update UI
@@ -162,11 +162,11 @@
                     `<span class="status-online">✅ Online (${data.database || 'connected'})</span>`;
             } else {
                 document.getElementById('backendStatus').innerHTML = 
-                    '<span class="status-offline">❌ Offline - Health check failed</span>';
+                    '<span class="status-offline">❌ Offline - Health check failed!</span>';
             }
         } catch (error) {
             document.getElementById('backendStatus').innerHTML = 
-                '<span class="status-offline">❌ Offline - Connection failed</span>';
+                '<span class="status-offline">❌ Offline - Local connection is not established!</span>';
             console.error('Backend connection test failed:', error);
         }
     }
