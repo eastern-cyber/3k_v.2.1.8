@@ -67,15 +67,12 @@
             color: #d32f2f;
             font-weight: bold;
         }
-
-        /* Name Edit Style */
         .name-section {
             display: flex;
             align-items: center;
             gap: 10px;
             margin: 10px 0;
         }
-
         .name-edit-form {
             display: none;
             margin: 10px 0;
@@ -85,12 +82,10 @@
             border: 1px solid #ddd;
             animation: fadeIn 0.3s ease;
         }
-
         @keyframes fadeIn {
             from { opacity: 0; }
             to { opacity: 1; }
         }
-
         .message-success {
             color: #2E7D32;
             background: #e8f5e9;
@@ -98,7 +93,6 @@
             border-radius: 4px;
             margin: 10px 0;
         }
-
         .message-error {
             color: #d32f2f;
             background: #ffebee;
@@ -106,7 +100,6 @@
             border-radius: 4px;
             margin: 10px 0;
         }
-
         .message-loading {
             color: #1976D2;
             background: #e3f2fd;
@@ -114,13 +107,10 @@
             border-radius: 4px;
             margin: 10px 0;
         }
-
         .wallet-address {
             font-family: monospace;
             word-break: break-all;
         }
-
-        /* Debug info */
         .debug-info {
             background: #f0f8ff;
             border: 1px dashed #4CAF50;
@@ -130,8 +120,13 @@
             font-size: 12px;
             font-family: monospace;
         }
-
-        /* For small screens, truncate with ellipsis */
+        .test-section {
+            background: #fff3cd;
+            border: 1px dashed #ff9800;
+            padding: 10px;
+            border-radius: 5px;
+            margin: 15px 0;
+        }
         @media (max-width: 768px) {
             .wallet-address {
                 display: inline-block;
@@ -160,6 +155,18 @@
             <button onclick="forceUpdateBackend()" class="btn" style="padding: 5px 10px; font-size: 11px; background: #ff9800;">
                 🔄 Force Fix Backend URL
             </button>
+            <button onclick="debugToken()" class="btn" style="padding: 5px 10px; font-size: 11px; background: #9C27B0;">
+                🔍 Debug Token
+            </button>
+        </div>
+        
+        <!-- API Test Section -->
+        <div class="test-section">
+            <h3 style="margin-top: 0;">🧪 API Tests</h3>
+            <button onclick="testAllEndpoints()" class="btn" style="padding: 5px 10px; font-size: 11px; background: #17a2b8;">
+                Test All Endpoints
+            </button>
+            <div id="testResults" style="margin-top: 10px; font-family: monospace; font-size: 11px;"></div>
         </div>
         
         <div class="user-info">
@@ -175,7 +182,7 @@
                     </button>
                 </div>
                 
-                <!-- Name Edit Form (hidden by default) -->
+                <!-- Name Edit Form -->
                 <div id="nameEditForm" class="name-edit-form">
                     <h3 style="margin-top: 0;">แก้ไขชื่อของท่าน</h3>
                     <div style="display: flex; gap: 10px; align-items: center;">
@@ -206,7 +213,7 @@
         
         <div class="status-box">
             <p><strong>System Status:</strong> <span id="backendStatus">Checking...</span></p>
-            <p><strong>Session:</strong> <span id="sessionStatus">Valid (token stored in localStorage)</span></p>
+            <p><strong>Session:</strong> <span id="sessionStatus">Checking...</span></p>
             <p><strong>Environment:</strong> <span id="environment">Detecting...</span></p>
             <p><strong>Backend URL:</strong> <code id="backendUrl">Detecting...</code></p>
         </div>
@@ -217,6 +224,9 @@
     let isEditingName = false;
     let currentBackendUrl = '';
 
+    // ========== INITIALIZATION ==========
+    console.log('Dashboard loaded - v2.1.5');
+
     // ========== DEBUG FUNCTIONS ==========
     function updateDebugInfo() {
         document.getElementById('debugDomain').textContent = `Domain: ${window.location.hostname}`;
@@ -224,11 +234,9 @@
     }
 
     function forceUpdateBackend() {
-        // Clear any old backend URLs
         localStorage.removeItem('backend_url');
         localStorage.removeItem('backend_port');
         
-        // Always use current domain
         const currentDomain = window.location.origin;
         localStorage.setItem('backend_url', currentDomain);
         
@@ -236,10 +244,39 @@
         window.location.reload();
     }
 
-    // ========== INITIALIZATION ==========
-    console.log('Dashboard loaded - v2.1.5');
+    function debugToken() {
+        const token = localStorage.getItem('token');
+        if (!token) {
+            alert('❌ No token found');
+            return;
+        }
+        
+        console.log('🔐 Token (first 50 chars):', token.substring(0, 50) + '...');
+        
+        try {
+            const parts = token.split('.');
+            if (parts.length === 3) {
+                const payload = JSON.parse(atob(parts[1]));
+                console.log('🔐 Token payload:', payload);
+                
+                let message = '🔐 Token Info:\n\n';
+                message += `User ID: ${payload.userId || 'N/A'}\n`;
+                message += `Email: ${payload.email || 'N/A'}\n`;
+                message += `Name: ${payload.name || 'N/A'}\n`;
+                if (payload.exp) {
+                    const expiry = new Date(payload.exp * 1000);
+                    message += `Expires: ${expiry.toLocaleString()}\n`;
+                }
+                
+                alert(message);
+            }
+        } catch (e) {
+            console.error('Error decoding token:', e);
+            alert('❌ Error decoding token');
+        }
+    }
 
-    // Check authentication on page load
+    // ========== AUTHENTICATION ==========
     function checkAuthentication() {
         const token = localStorage.getItem('token') || localStorage.getItem('user_token');
         const userData = localStorage.getItem('user') || localStorage.getItem('user_data');
@@ -341,6 +378,8 @@
             // Get backend URL
             const backendUrl = getBackendUrl();
             console.log('📤 Updating name via:', backendUrl + '/api/auth/update-profile');
+            console.log('📤 Token:', token.substring(0, 20) + '...');
+            console.log('📤 New name:', newName);
             
             // Send update request
             const response = await fetch(`${backendUrl}/api/auth/update-profile`, {
@@ -351,6 +390,8 @@
                 },
                 body: JSON.stringify({ name: newName })
             });
+            
+            console.log('📥 Response status:', response.status);
             
             // Handle response
             if (response.status === 401) {
@@ -363,6 +404,7 @@
             }
             
             const data = await response.json();
+            console.log('📥 Response data:', data);
             
             if (data.success) {
                 document.getElementById('nameEditMessage').innerHTML = 
@@ -376,6 +418,9 @@
                 if (userData) {
                     const user = JSON.parse(userData);
                     user.name = newName;
+                    if (data.user) {
+                        Object.assign(user, data.user);
+                    }
                     localStorage.setItem('user', JSON.stringify(user));
                     localStorage.setItem('user_data', JSON.stringify(user));
                 }
@@ -383,11 +428,13 @@
                 // Hide form after successful update
                 setTimeout(() => {
                     cancelNameEdit();
+                    showMessage('Name updated successfully!', 'success');
                 }, 1500);
                 
             } else {
                 document.getElementById('nameEditMessage').innerHTML = 
                     `<span style="color: red;">❌ Error: ${data.message || 'Update failed'}</span>`;
+                console.error('Update failed:', data);
             }
             
         } catch (error) {
@@ -399,25 +446,8 @@
 
     // ========== BACKEND FUNCTIONS ==========
     function getBackendUrl() {
-        // First, check if we have a stored backend URL
-        const storedBackendUrl = localStorage.getItem('backend_url');
-        
-        // If stored URL exists and doesn't contain the old domain (3k214), use it
-        if (storedBackendUrl && !storedBackendUrl.includes('3k214.dfi.fund')) {
-            return storedBackendUrl.replace(/\/$/, ''); // Remove trailing slash
-        }
-        
-        // Check if we're in local development
-        const isLocalhost = window.location.hostname === 'localhost' || 
-                            window.location.hostname === '127.0.0.1';
-        
-        if (isLocalhost) {
-            const storedPort = localStorage.getItem('backend_port') || '3001';
-            return `http://localhost:${storedPort}`;
-        } else {
-            // Always use current domain for production
-            return window.location.origin;
-        }
+        // Always use current domain for API calls
+        return window.location.origin;
     }
 
     function detectBackendEnvironment() {
@@ -426,14 +456,8 @@
         
         currentBackendUrl = getBackendUrl();
         
-        // Force update localStorage to ensure we have the correct URL
-        if (!currentBackendUrl.includes('3k214.dfi.fund')) {
-            localStorage.setItem('backend_url', currentBackendUrl);
-        }
-        
         const environment = isLocalhost ? '🖥️ Local Development' : '🌐 Production';
         
-        // Update UI
         document.getElementById('environment').textContent = environment;
         document.getElementById('backendUrl').textContent = currentBackendUrl;
         
@@ -448,9 +472,7 @@
             
             const response = await fetch(`${backendUrl}/api/auth/health`, {
                 method: 'GET',
-                headers: {
-                    'Accept': 'application/json'
-                }
+                headers: { 'Accept': 'application/json' }
             });
             
             if (response.ok) {
@@ -482,53 +504,135 @@
         
         try {
             const backendUrl = getBackendUrl();
-            console.log('🔐 Testing token validity with:', backendUrl + '/api/auth/debug-token');
+            console.log('🔐 Testing token with:', backendUrl + '/api/auth/validate-token');
             
-            const response = await fetch(`${backendUrl}/api/auth/debug-token`, {
-                headers: { 'Authorization': `Bearer ${token}` }
+            const response = await fetch(`${backendUrl}/api/auth/validate-token`, {
+                headers: { 
+                    'Authorization': `Bearer ${token}`,
+                    'Accept': 'application/json'
+                }
             });
+            
+            console.log('🔐 Response status:', response.status);
             
             if (response.ok) {
                 const data = await response.json();
+                console.log('🔐 Valid user:', data.user);
                 document.getElementById('sessionStatus').innerHTML = 
-                    `<span class="status-online">✅ Valid session (${data.user?.email || 'active'})</span>`;
+                    `<span class="status-online">✅ Valid (${data.user?.email || 'Active'})</span>`;
                 return true;
             } else {
+                const errorText = await response.text();
+                console.error('🔐 Token validation failed:', errorText);
                 document.getElementById('sessionStatus').innerHTML = 
                     '<span class="status-offline">❌ Invalid token</span>';
                 return false;
             }
         } catch (error) {
             document.getElementById('sessionStatus').innerHTML = 
-                '<span class="status-offline">❌ Token validation failed</span>';
+                '<span class="status-offline">❌ Token check failed</span>';
             console.error('Token validation error:', error);
             return false;
         }
     }
 
+    // ========== API TEST FUNCTIONS ==========
+    async function testAllEndpoints() {
+        const resultsDiv = document.getElementById('testResults');
+        resultsDiv.innerHTML = '<div style="color: blue;">🧪 Testing endpoints...</div>';
+        
+        const backendUrl = getBackendUrl();
+        const token = localStorage.getItem('token');
+        
+        const endpoints = [
+            { name: 'Health Check', url: `${backendUrl}/api/health`, method: 'GET', auth: false },
+            { name: 'Auth Health', url: `${backendUrl}/api/auth/health`, method: 'GET', auth: false },
+            { name: 'Validate Token', url: `${backendUrl}/api/auth/validate-token`, method: 'GET', auth: true },
+            { name: 'User Profile', url: `${backendUrl}/api/auth/profile`, method: 'GET', auth: true }
+        ];
+        
+        let results = [];
+        
+        for (const endpoint of endpoints) {
+            try {
+                const headers = { 'Accept': 'application/json' };
+                if (endpoint.auth && token) {
+                    headers['Authorization'] = `Bearer ${token}`;
+                }
+                
+                const response = await fetch(endpoint.url, { method: endpoint.method, headers });
+                const status = response.status;
+                const isSuccess = response.ok;
+                
+                let resultText;
+                try {
+                    const data = await response.json();
+                    resultText = JSON.stringify(data, null, 2).substring(0, 200) + '...';
+                } catch {
+                    resultText = await response.text();
+                }
+                
+                results.push({
+                    name: endpoint.name,
+                    status: status,
+                    success: isSuccess,
+                    result: resultText
+                });
+                
+            } catch (error) {
+                results.push({
+                    name: endpoint.name,
+                    status: 'ERROR',
+                    success: false,
+                    result: error.message
+                });
+            }
+        }
+        
+        // Display results
+        let html = '<h4 style="margin: 0 0 10px 0;">Test Results:</h4>';
+        results.forEach(result => {
+            const color = result.success ? 'green' : 'red';
+            html += `
+                <div style="margin-bottom: 8px; padding: 5px; border-left: 3px solid ${color};">
+                    <strong>${result.name}:</strong> 
+                    <span style="color: ${color}; font-weight: bold;">
+                        ${result.success ? '✅' : '❌'} ${result.status}
+                    </span>
+                    <div style="color: #666; font-size: 10px; margin-top: 2px;">
+                        ${result.result}
+                    </div>
+                </div>
+            `;
+        });
+        
+        resultsDiv.innerHTML = html;
+    }
+
     // ========== UTILITY FUNCTIONS ==========
     function showMessage(message, type = 'info') {
         const colors = {
-            'success': 'green',
-            'error': 'red',
-            'info': 'blue',
-            'warning': 'orange'
+            'success': '#4CAF50',
+            'error': '#f44336',
+            'info': '#2196F3',
+            'warning': '#ff9800'
         };
         
         console.log(`${type.toUpperCase()}: ${message}`);
         
-        // Simple toast notification
         const toast = document.createElement('div');
         toast.style.cssText = `
             position: fixed;
             top: 20px;
             right: 20px;
-            padding: 10px 20px;
+            padding: 12px 20px;
             background: ${colors[type] || '#2196F3'};
             color: white;
             border-radius: 5px;
             z-index: 1000;
             animation: slideIn 0.3s ease;
+            font-weight: 500;
+            box-shadow: 0 3px 10px rgba(0,0,0,0.2);
         `;
         toast.textContent = message;
         document.body.appendChild(toast);
@@ -579,18 +683,16 @@
         // Test token validity
         testTokenValidity();
         
-        // Auto-refresh backend status every 30 seconds
+        // Auto-refresh status
         setInterval(() => {
             testBackendConnection();
+            updateDebugInfo();
         }, 30000);
-        
-        // Update debug info every 5 seconds
-        setInterval(updateDebugInfo, 5000);
         
         console.log('✅ Dashboard initialized successfully');
     }
 
-    // Add CSS for toast animations
+    // Add CSS for animations
     const style = document.createElement('style');
     style.textContent = `
         @keyframes slideIn {
@@ -607,7 +709,7 @@
     // Initialize when DOM is loaded
     document.addEventListener('DOMContentLoaded', initializeDashboard);
     
-    // Add global error handler
+    // Global error handler
     window.addEventListener('error', function(e) {
         console.error('Global error:', e.error);
         showMessage('An error occurred: ' + e.error.message, 'error');

@@ -12,8 +12,14 @@ const app = express();
 // ========== MIDDLEWARE ==========
 app.use(cors({
     origin: ['https://3kv215.dfi.fund', 'http://localhost:3000'],
-    credentials: true
+    credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'Accept']
 }));
+
+// Handle preflight requests
+app.options('*', cors());
+
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
@@ -43,6 +49,7 @@ const authenticateToken = (req, res, next) => {
     
     jwt.verify(token, process.env.JWT_SECRET || 'development-secret', (err, user) => {
         if (err) {
+            console.error('❌ Token verification error:', err.message);
             return res.status(403).json({ 
                 success: false, 
                 message: 'Invalid or expired token' 
@@ -54,11 +61,11 @@ const authenticateToken = (req, res, next) => {
 };
 
 // ========== STATIC FILES ==========
-// Serve assets from public directory
 app.use('/public', express.static(path.join(__dirname, 'public')));
 app.use('/css', express.static(path.join(__dirname, 'public/css')));
 app.use('/js', express.static(path.join(__dirname, 'public/js')));
 app.use('/images', express.static(path.join(__dirname, 'public/images')));
+app.use('/static', express.static(path.join(__dirname, 'static')));
 
 // Serve HTML files from templates directory
 app.use(express.static(path.join(__dirname, 'templates')));
@@ -89,7 +96,7 @@ app.get('/api/health', async (req, res) => {
         
         res.json({
             success: true,
-            service: 'KokKokKok API v2.1.4',
+            service: 'KokKokKok API v2.1.5',
             status: 'online',
             timestamp: new Date().toISOString(),
             database: dbStatus,
@@ -98,7 +105,7 @@ app.get('/api/health', async (req, res) => {
     } catch (error) {
         res.json({
             success: true,
-            service: 'KokKokKok API v2.1.4',
+            service: 'KokKokKok API v2.1.5',
             status: 'online',
             timestamp: new Date().toISOString(),
             database: 'disconnected',
@@ -117,7 +124,17 @@ app.get('/api/auth/health', async (req, res) => {
     });
 });
 
-// Debug token endpoint
+// Token validation endpoints
+app.get('/api/auth/validate-token', authenticateToken, (req, res) => {
+    res.json({
+        success: true,
+        user: req.user,
+        message: 'Token is valid',
+        timestamp: new Date().toISOString()
+    });
+});
+
+// Debug token endpoint (alias for compatibility)
 app.get('/api/auth/debug-token', authenticateToken, (req, res) => {
     res.json({
         success: true,
@@ -125,6 +142,43 @@ app.get('/api/auth/debug-token', authenticateToken, (req, res) => {
         message: 'Token is valid',
         timestamp: new Date().toISOString()
     });
+});
+
+// Get user profile
+app.get('/api/auth/profile', authenticateToken, async (req, res) => {
+    try {
+        if (!pool) {
+            return res.status(500).json({
+                success: false,
+                message: 'Database connection not available'
+            });
+        }
+        
+        const userId = req.user.userId;
+        const result = await pool.query(
+            'SELECT id, user_id, email, name, created_at FROM users WHERE id = $1',
+            [userId]
+        );
+        
+        if (result.rows.length === 0) {
+            return res.status(404).json({
+                success: false,
+                message: 'User not found'
+            });
+        }
+        
+        res.json({
+            success: true,
+            user: result.rows[0]
+        });
+        
+    } catch (error) {
+        console.error('Profile error:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Server error fetching profile'
+        });
+    }
 });
 
 // Login endpoint
@@ -148,7 +202,7 @@ app.post('/api/auth/login', async (req, res) => {
         
         // Find user by email or user_id
         const result = await pool.query(
-            `SELECT id, user_id, token_id, email, name, password_hash
+            `SELECT id, user_id, email, name, password_hash
              FROM users WHERE email = $1 OR user_id = $1`,
             [email]
         );
@@ -176,7 +230,7 @@ app.post('/api/auth/login', async (req, res) => {
                 userId: user.id,
                 user_id: user.user_id,
                 email: user.email,
-                token_id: user.token_id
+                name: user.name
             },
             process.env.JWT_SECRET || 'development-secret',
             { expiresIn: '7d' }
@@ -202,7 +256,7 @@ app.post('/api/auth/login', async (req, res) => {
     }
 });
 
-// Update profile endpoint
+// Update profile endpoint - FIXED VERSION
 app.put('/api/auth/update-profile', authenticateToken, async (req, res) => {
     console.log('📝 Update profile request received');
     
@@ -213,10 +267,10 @@ app.put('/api/auth/update-profile', authenticateToken, async (req, res) => {
         console.log('Request data:', { name, userId, user: req.user });
         
         // Validate input
-        if (!name || name.trim().length === 0) {
+        if (!name || typeof name !== 'string' || name.trim().length === 0) {
             return res.status(400).json({
                 success: false,
-                message: 'Name is required'
+                message: 'Valid name is required'
             });
         }
 
@@ -228,17 +282,40 @@ app.put('/api/auth/update-profile', authenticateToken, async (req, res) => {
         }
 
         if (!pool) {
+            console.error('❌ Database pool not available');
             return res.status(500).json({
                 success: false,
                 message: 'Database connection not available'
             });
         }
 
-        // Update user in database
-        const query = 'UPDATE users SET name = $1 WHERE id = $2 RETURNING id, name, email, created_at';
-        const values = [name.trim(), userId];
+        // Test database connection first
+        try {
+            await pool.query('SELECT 1');
+            console.log('✅ Database connection OK');
+        } catch (dbError) {
+            console.error('❌ Database connection failed:', dbError);
+            return res.status(500).json({
+                success: false,
+                message: 'Database connection failed',
+                error: dbError.message
+            });
+        }
+
+        // Update user in database - SIMPLE WORKING VERSION
+        const trimmedName = name.trim();
+        
+        console.log(`🔄 Updating user ${userId} name to: "${trimmedName}"`);
+        
+        const query = 'UPDATE users SET name = $1 WHERE id = $2 RETURNING id, user_id, email, name';
+        const values = [trimmedName, userId];
+        
+        console.log('Executing query:', query);
+        console.log('With values:', values);
         
         const result = await pool.query(query, values);
+        
+        console.log('Update result:', result.rows);
         
         if (result.rowCount === 0) {
             return res.status(404).json({
@@ -257,10 +334,14 @@ app.put('/api/auth/update-profile', authenticateToken, async (req, res) => {
         
     } catch (error) {
         console.error('❌ Update profile error:', error);
+        console.error('Error stack:', error.stack);
+        
         res.status(500).json({
             success: false,
-            message: 'Error updating profile',
-            error: error.message
+            message: 'Server error updating profile',
+            error: error.message,
+            // Include stack trace only in development
+            ...(process.env.NODE_ENV === 'development' && { stack: error.stack })
         });
     }
 });
@@ -289,5 +370,10 @@ if (require.main === module) {
         console.log(`🚀 Server running on port ${PORT}`);
         console.log(`📁 Static files: ${__dirname}`);
         console.log(`🔗 Health check: http://localhost:${PORT}/api/health`);
+        console.log(`🔗 API endpoints:`);
+        console.log(`   POST /api/auth/login`);
+        console.log(`   GET  /api/auth/validate-token`);
+        console.log(`   GET  /api/auth/profile`);
+        console.log(`   PUT  /api/auth/update-profile`);
     });
 }
