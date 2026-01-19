@@ -1,4 +1,4 @@
-#!/Users/macintoshhd/3k.dfi.fund/3k_v.2.1.8/venv/bin/python3
+#!/Users/macintoshhd/3k.dfi.fund/3k_v.2.1.8/venv/bin/python3.13
 # -*- coding: utf-8 -*-
 import re
 import sys
